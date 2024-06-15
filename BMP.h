@@ -1,9 +1,9 @@
-#ifndef LOADBMP_H
-#define LOADBMP_H
+#ifndef BMP_H
+#define BMP_H
 
 #include <stdio.h>
 #include <stdlib.h>
-
+ 
 
 #pragma pack(push, 1)
 
@@ -30,10 +30,20 @@ typedef struct {
 
 #pragma pack(pop)
 
+#pragma pack(1)
+typedef struct {
+
+    unsigned char rgbBlue;
+    unsigned char rgbGreen;
+    unsigned char rgbRed;
+    unsigned char rgbReserved;
+}RGBQUAD;
+
 typedef struct {
 
     HEADER* header;
     INFO_HEADER* info_header;
+    RGBQUAD* rgb_quad;
     unsigned char* data;
 
 } BMP;
@@ -59,6 +69,7 @@ BMP* OpenImg(char* img_path){
     // avoid img_size is 0
     if(img_size == 0){
         img_size = info_header->width * info_header->height * 3;
+        info_header->img_size = img_size;
     }
     unsigned char* data = (unsigned char*) malloc(img_size);
     fseek(file, header->offset, SEEK_SET);
