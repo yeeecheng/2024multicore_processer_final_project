@@ -4,31 +4,37 @@
 
 void Gray(BMP* bmp){
 
-    bmp->info_header->bits = 8;
-    bmp->header->offset = sizeof(HEADER) + sizeof(INFO_HEADER) + 256 * sizeof(RGBQUAD);
-    bmp->header->size = bmp->header->offset + bmp->info_header->img_size;
+    BMP* gray_bmp = (BMP*)malloc(sizeof(BMP));
+    gray_bmp->header = bmp->header;
+    gray_bmp->info_header = bmp->info_header;
+    gray_bmp->info_header->bits = 8;
+    gray_bmp->header->offset = sizeof(HEADER) + sizeof(INFO_HEADER) + 256 * sizeof(RGBQUAD);
+    gray_bmp->header->size = gray_bmp->header->offset + gray_bmp->info_header->img_size;
     // bits=24, 32 no need 調色盤, then gray scale need it which is R=G=B
     RGBQUAD* rgb_quad = (RGBQUAD*)malloc(256 * sizeof(RGBQUAD));
     for(int i = 0; i < 256; i++){
         rgb_quad[i].rgbBlue = rgb_quad[i].rgbGreen = rgb_quad[i].rgbRed = i;
     }
-
+    gray_bmp->rgb_quad = rgb_quad;
     // write into new file.
     FILE* out = fopen("./gray.bmp", "wb");    
-    fwrite(bmp->header, sizeof(HEADER), 1, out);
-    fwrite(bmp->info_header, sizeof(INFO_HEADER), 1, out);
-    fwrite(rgb_quad,  sizeof(RGBQUAD), 256, out);
+    fwrite(gray_bmp->header, sizeof(HEADER), 1, out);
+    fwrite(gray_bmp->info_header, sizeof(INFO_HEADER), 1, out);
+    fwrite(gray_bmp->rgb_quad,  sizeof(RGBQUAD), 256, out);
     
-    unsigned char* data = bmp->data;
+    unsigned char* data = (unsigned char*)malloc((bmp->info_header->img_size / 3) * sizeof(unsigned char));
     for(int i = 0; i <  bmp->info_header->img_size; i += 3){
         // 0.299 * R + 0.587 * G + 0.114 * B;
-        unsigned char Y = (int)(0.299 * (float)data[i + 2] + 0.587 * (float)data[i + 1] + 0.114 * (float)data[i]);
-        // writing in file per pixel
-        fwrite(&Y, 1, 1, out);
-    
+        data[i / 3] = (int)(0.299 * (float)bmp->data[i + 2] + 0.587 * (float)bmp->data[i + 1] + 0.114 * (float)bmp->data[i]);
     }
+    // writing in file per pixel
+    fwrite(data, 1, (bmp->info_header->img_size / 3), out);
 }
 
+
+void GaussianBlur(){
+
+}
 
 int main() {
     

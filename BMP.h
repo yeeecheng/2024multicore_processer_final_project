@@ -106,7 +106,7 @@ void SaveImg(char* img_path,  BMP* bmp){
 
 
 void PrintImgInfo(BMP* bmp){
-    printf("Header: \n");
+    printf("\nHeader: \n");
     printf("type: %u\n", bmp->header->type);
     printf("size: %u\n", bmp->header->size);
     printf("reserved1: %u\n", bmp->header->reserved1);
