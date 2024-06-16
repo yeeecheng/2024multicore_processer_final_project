@@ -77,7 +77,9 @@ BMP* GaussianBlur(BMP* bmp, int size, double sigma){
 
     // raw data mul kernel weight.
     int width = bmp->info_header->width, height = bmp->info_header->height;
-    unsigned char* data = bmp->data;
+    unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char));
+    data = bmp->data;
+
     int m = size / 2;
     for(int i = m; i < height - m; i++){
         for(int j = m; j < width - m; j++){
@@ -95,7 +97,6 @@ BMP* GaussianBlur(BMP* bmp, int size, double sigma){
     // writing in file per pixel
     fwrite(data, 1, (bmp->info_header->img_size), out);
     gaussian_blur_bmp->data = data;
-    
     // free
     for(int i = 0; i < size; i++){
         free(kernel[i]);
@@ -104,6 +105,115 @@ BMP* GaussianBlur(BMP* bmp, int size, double sigma){
 
     return gaussian_blur_bmp;
 }
+
+BMP* SobelGradient(BMP* bmp, float* theta){
+    
+    int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+
+    BMP* sobel_gradient_bmp = (BMP*)malloc(sizeof(BMP));
+    sobel_gradient_bmp->header = bmp->header;
+    sobel_gradient_bmp->info_header = bmp->info_header;
+    sobel_gradient_bmp->rgb_quad = bmp->rgb_quad;
+
+    FILE* out = fopen("./sobelGradient.bmp", "wb");
+    fwrite(sobel_gradient_bmp->header, sizeof(HEADER), 1, out);
+    fwrite(sobel_gradient_bmp->info_header, sizeof(INFO_HEADER), 1, out);
+    fwrite(sobel_gradient_bmp->rgb_quad, sizeof(RGBQUAD), 256, out);
+
+    int width = bmp->info_header->width, height = bmp->info_header->height;
+    
+    unsigned char* G_data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char)); 
+    // G_data = bmp->data;
+    for(int i = 1; i < height - 1; i++){
+        for(int j = 1; j < width - 1; j++){
+            
+            int gx = 0, gy = 0;
+            for(int ii = -1; ii <= 1; ii++){
+                for(int jj = -1; jj <= 1; jj++){
+                    int val = bmp->data[(i + ii) * width + (j + jj)];
+                    gx += val * sobel_x[ii + 1][jj + 1];
+                    gy += val * sobel_y[ii + 1][jj + 1];
+                }
+            }
+            G_data[i * width + j] = (unsigned char)sqrt(gx * gx + gy * gy);
+            theta[i * width + j] = atan2(gy, gx) * 180 / M_PI;
+          
+            // if(G_data[i * width + j] > 0){
+            //     G_data[i * width + j] = 255;
+            // }
+            // printf("%d\n", G_data[i * width + j]);
+        }
+    }
+    fwrite(G_data, 1, (bmp->info_header->img_size), out);
+    sobel_gradient_bmp->data = G_data;
+
+    return sobel_gradient_bmp;
+}
+
+
+void NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
+
+    BMP* non_maximum_suppression_bmp = (BMP*)malloc(sizeof(BMP));
+    non_maximum_suppression_bmp->header = bmp->header;
+    non_maximum_suppression_bmp->info_header = bmp->info_header;
+    non_maximum_suppression_bmp->rgb_quad = bmp->rgb_quad;
+
+    FILE* out = fopen("./nonMaximumSuppression.bmp", "wb");
+    fwrite(non_maximum_suppression_bmp->header, sizeof(HEADER), 1, out);
+    fwrite(non_maximum_suppression_bmp->info_header, sizeof(INFO_HEADER), 1, out);
+    fwrite(non_maximum_suppression_bmp->rgb_quad, sizeof(RGBQUAD), 256, out);
+
+    int width = bmp->info_header->width, height = bmp->info_header->height;
+
+    unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char)); 
+    // data = bmp->data;
+    for(int i = 1; i < height - 1; i++){
+        for(int j = 1; j < width - 1; j++){
+            
+            float angle = theta[i * width + j];
+            
+            if(angle < 0){
+                angle += 180;
+            }
+
+            // Find the max gradient in gradient direction（0, 45, 90, 135). if it isn't maximum gradient setting to 0.
+            if(((angle >= 0 && angle < 22.5) || (angle >= 157.5 && angle < 180)) ||
+            ((angle >= 22.5 && angle < 67.5) || (angle >= 202.5 && angle < 247.5)) ||
+            ((angle >= 67.5 && angle < 112.5) || (angle >= 247.5 && angle < 292.5)) ||
+            ((angle >= 112.5 && angle < 157.5) || (angle >= 292.5 && angle < 337.5))){
+
+                if(bmp->data[i * width + j] > bmp->data[i * width + j - 1] && bmp->data[i * width + j] > bmp->data[i * width + j + 1]){
+                    data[i * width + j] = (bmp->data[i * width + j] >= threshold) ? 255 : 0;
+                }
+                else {
+                    data[i * width + j] = 0;
+                }
+            }
+            else{
+                if(bmp->data[i * width + j] > bmp->data[(i - 1) * width + j] && bmp->data[i * width + j] > bmp->data[(i + 1)  * width + j]){
+                    data[i * width + j] = (bmp->data[i * width + j] >= threshold) ? 255 : 0;
+                }
+                else {
+                    data[i * width + j] = 0;
+                }
+            }
+        }
+    }
+
+    for(int i = 0; i < height; i++){
+        data[i * width] = 0;
+        data[i * width + width - 1] = 0;
+    }
+
+    for(int j = 0; j < width; j++){
+        data[j] = 0;
+        data[(height - 1) * width + j] = 0;
+    }
+    fwrite(data, 1, (bmp->info_header->img_size), out);
+    non_maximum_suppression_bmp->data = data;
+}
+
 
 int main() {
     
@@ -121,11 +231,15 @@ int main() {
         
     // }
     
-    BMP* bmp = OpenImg("./frame_out/frame1.bmp");
-    PrintImgInfo(bmp);
+    BMP* bmp = OpenImg("./frame_save/frame1.bmp");
     BMP* gray_bmp = Gray(bmp);
-    BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 31, 1);
+    BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1);
+    PrintImgInfo(gaussian_blur_bmp);
 
+    float* theta = (float*)malloc(gaussian_blur_bmp->info_header->img_size * sizeof(float));
+    BMP* sobel_gradient_bmp = SobelGradient(gaussian_blur_bmp, theta);
+    PrintImgInfo(sobel_gradient_bmp);
+    NonMaximumSuppression(sobel_gradient_bmp, theta, 100);
     free(bmp);
     
 
