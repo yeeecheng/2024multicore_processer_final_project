@@ -78,7 +78,6 @@ BMP* GaussianBlur(BMP* bmp, int size, double sigma){
     // raw data mul kernel weight.
     int width = bmp->info_header->width, height = bmp->info_header->height;
     unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char));
-    data = bmp->data;
 
     int m = size / 2;
     for(int i = m; i < height - m; i++){
@@ -107,7 +106,10 @@ BMP* GaussianBlur(BMP* bmp, int size, double sigma){
 }
 
 BMP* SobelGradient(BMP* bmp, float* theta){
-    
+
+    // calculate sobel gradient. 
+
+    // sobel_x / sobel_y kernel
     int sobel_x[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
     int sobel_y[3][3] = {{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
 
@@ -122,9 +124,8 @@ BMP* SobelGradient(BMP* bmp, float* theta){
     fwrite(sobel_gradient_bmp->rgb_quad, sizeof(RGBQUAD), 256, out);
 
     int width = bmp->info_header->width, height = bmp->info_header->height;
-    
     unsigned char* G_data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char)); 
-    // G_data = bmp->data;
+
     for(int i = 1; i < height - 1; i++){
         for(int j = 1; j < width - 1; j++){
             
@@ -138,21 +139,16 @@ BMP* SobelGradient(BMP* bmp, float* theta){
             }
             G_data[i * width + j] = (unsigned char)sqrt(gx * gx + gy * gy);
             theta[i * width + j] = atan2(gy, gx) * 180 / M_PI;
-          
-            // if(G_data[i * width + j] > 0){
-            //     G_data[i * width + j] = 255;
-            // }
-            // printf("%d\n", G_data[i * width + j]);
         }
     }
+
     fwrite(G_data, 1, (bmp->info_header->img_size), out);
     sobel_gradient_bmp->data = G_data;
 
     return sobel_gradient_bmp;
 }
 
-
-void NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
+BMP* NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
 
     BMP* non_maximum_suppression_bmp = (BMP*)malloc(sizeof(BMP));
     non_maximum_suppression_bmp->header = bmp->header;
@@ -165,9 +161,8 @@ void NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
     fwrite(non_maximum_suppression_bmp->rgb_quad, sizeof(RGBQUAD), 256, out);
 
     int width = bmp->info_header->width, height = bmp->info_header->height;
-
     unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char)); 
-    // data = bmp->data;
+ 
     for(int i = 1; i < height - 1; i++){
         for(int j = 1; j < width - 1; j++){
             
@@ -212,8 +207,76 @@ void NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
     }
     fwrite(data, 1, (bmp->info_header->img_size), out);
     non_maximum_suppression_bmp->data = data;
+
+    return non_maximum_suppression_bmp;
 }
 
+void DoubleThresholding(BMP* bmp, float low_threshold, float high_threshold){
+
+    BMP* double_thresholding_bmp = (BMP*)malloc(sizeof(BMP));
+    double_thresholding_bmp->header = bmp->header;
+    double_thresholding_bmp->info_header = bmp->info_header;
+    double_thresholding_bmp->rgb_quad = bmp->rgb_quad;
+
+    FILE* out = fopen("./doubleThresholding.bmp", "wb");
+    fwrite(double_thresholding_bmp->header, sizeof(HEADER), 1, out);
+    fwrite(double_thresholding_bmp->info_header, sizeof(INFO_HEADER), 1, out);
+    fwrite(double_thresholding_bmp->rgb_quad, sizeof(RGBQUAD), 256, out);
+
+    int width = bmp->info_header->width, height = bmp->info_header->height; 
+    unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char));
+    
+    for(int i = 0; i < height; i++){
+        for(int j = 0; j < width; j++){
+            
+            // strong edge
+            if(bmp->data[i * width + j] >= high_threshold){
+                data[i * width + j] = 255;
+            }
+            // weak edge
+            else if(bmp->data[i * width + j] >= low_threshold){
+                data[i * width + j] = 128;
+            }
+            else{
+                data[i * width + j] = 0;
+            }
+
+        }
+    }
+    
+
+    //edge tracking
+
+    unsigned char* edge_data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char));
+
+    int pos[9][2] = {{-1, -1}, {-1, 0}, {-1, 1}, 
+                     { 0, -1}, { 0, 0}, { 0, 1}, 
+                     { 1, -1}, { 1, 0}, { 1, 1}}; 
+    
+    for(int i = 1; i < height - 1; i++){
+        for(int j = 1; j < width - 1; j++){
+            
+            if(data[i * width + j] == 255){
+                edge_data[i * width + j] = data[i * width + j];
+                continue;
+            }
+            
+            bool flag = false;
+            for(int p = 0; p <= 8; p++){
+                flag |= (data[(i + pos[p][0] ) * width + (j + pos[p][1])] == 255);
+            }
+         
+
+            int val = 0;
+            if(flag) val = 255;
+    
+            edge_data[i * width + j] = val;
+        }
+    }
+
+    fwrite(edge_data, 1, (bmp->info_header->img_size), out);
+    double_thresholding_bmp->data = edge_data;
+}
 
 int main() {
     
@@ -231,7 +294,7 @@ int main() {
         
     // }
     
-    BMP* bmp = OpenImg("./frame_save/frame1.bmp");
+    BMP* bmp = OpenImg("./t.bmp");
     BMP* gray_bmp = Gray(bmp);
     BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1);
     PrintImgInfo(gaussian_blur_bmp);
@@ -239,7 +302,8 @@ int main() {
     float* theta = (float*)malloc(gaussian_blur_bmp->info_header->img_size * sizeof(float));
     BMP* sobel_gradient_bmp = SobelGradient(gaussian_blur_bmp, theta);
     PrintImgInfo(sobel_gradient_bmp);
-    NonMaximumSuppression(sobel_gradient_bmp, theta, 100);
+    BMP* non_maximum_suppression_bmp = NonMaximumSuppression(sobel_gradient_bmp, theta, 60);
+    DoubleThresholding(non_maximum_suppression_bmp, 127, 255);
     free(bmp);
     
 
