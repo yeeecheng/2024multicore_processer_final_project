@@ -2,3 +2,4 @@ frame_out/*
 frame_save/*
 main
 .vscode/*
+build
