@@ -148,6 +148,7 @@ BMP* SobelGradient(BMP* bmp, float* theta){
     return sobel_gradient_bmp;
 }
 
+
 BMP* NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
 
     BMP* non_maximum_suppression_bmp = (BMP*)malloc(sizeof(BMP));
@@ -162,49 +163,68 @@ BMP* NonMaximumSuppression(BMP* bmp, float* theta, int threshold){
 
     int width = bmp->info_header->width, height = bmp->info_header->height;
     unsigned char* data = (unsigned char*)malloc(bmp->info_header->img_size * sizeof(unsigned char)); 
- 
+    
     for(int i = 1; i < height - 1; i++){
         for(int j = 1; j < width - 1; j++){
             
             float angle = theta[i * width + j];
-            
-            if(angle < 0){
-                angle += 180;
-            }
-
-            // Find the max gradient in gradient direction（0, 45, 90, 135). if it isn't maximum gradient setting to 0.
-            if(((angle >= 0 && angle < 22.5) || (angle >= 157.5 && angle < 180)) ||
-            ((angle >= 22.5 && angle < 67.5) || (angle >= 202.5 && angle < 247.5)) ||
-            ((angle >= 67.5 && angle < 112.5) || (angle >= 247.5 && angle < 292.5)) ||
-            ((angle >= 112.5 && angle < 157.5) || (angle >= 292.5 && angle < 337.5))){
-
-                if(bmp->data[i * width + j] > bmp->data[i * width + j - 1] && bmp->data[i * width + j] > bmp->data[i * width + j + 1]){
-                    data[i * width + j] = (bmp->data[i * width + j] >= threshold) ? 255 : 0;
+            double g1, g2, d_temp, weight;
+            // horizon
+            if((22.5 > angle && angle >= 0) || (0 >= angle && angle > -22.5) || 
+            (180 > angle && angle >= 157.5) || (-157.5 >= angle && angle > -180)){
+                g1 = bmp->data[i * width + j - 1];
+                g2 = bmp->data[i * width + j + 1];
+                weight = fabs(tan(angle * M_PI / 180));
+                d_temp = weight * g1 + (1 - weight) * g2;
+                if (bmp->data[i * width + j] > d_temp){
+                    data[i * width + j] = bmp->data[i * width + j];
                 }
-                else {
+                else{
                     data[i * width + j] = 0;
                 }
             }
-            else{
-                if(bmp->data[i * width + j] > bmp->data[(i - 1) * width + j] && bmp->data[i * width + j] > bmp->data[(i + 1)  * width + j]){
-                    data[i * width + j] = (bmp->data[i * width + j] >= threshold) ? 255 : 0;
+            // diag_up
+            else if((67.5 > angle && angle >= 22.5) || (-112.5 >= angle && angle > -157.5)){
+                g1 = bmp->data[(i - 1) * width + j + 1];
+                g2 = bmp->data[(i + 1) * width + j - 1];
+                weight = fabs(tan(angle * M_PI / 180));
+                d_temp = weight * g1 + (1 - weight) * g2;
+                if (bmp->data[i * width + j] > d_temp){
+                    data[i * width + j] = bmp->data[i * width + j];
                 }
-                else {
+                else{
+                    data[i * width + j] = 0;
+                }
+            }
+            // vertical
+            else if((112.5 > angle && angle >= 67.5) || (-67.5 >= angle && angle > -112.5)){
+                g1 = bmp->data[(i - 1) * width + j];
+                g2 = bmp->data[(i + 1) * width + j];
+                weight = fabs(tan(angle * M_PI / 180));
+                d_temp = weight * g1 + (1 - weight) * g2;
+                if (bmp->data[i * width + j] > d_temp){
+                    data[i * width + j] = bmp->data[i * width + j];
+                }
+                else{
+                    data[i * width + j] = 0;
+                }
+            }
+            // diag_down
+            else if((157.5 > angle && angle >= 112.5) || (-22.5 >= angle && angle > -67.5)){
+                g1 = bmp->data[(i - 1) * width + j - 1];
+                g2 = bmp->data[(i + 1) * width + j + 1];
+                weight = fabs(tan(angle * M_PI / 180));
+                d_temp = weight * g1 + (1 - weight) * g2;
+                if (bmp->data[i * width + j] > d_temp){
+                    data[i * width + j] = bmp->data[i * width + j];
+                }
+                else{
                     data[i * width + j] = 0;
                 }
             }
         }
     }
-
-    for(int i = 0; i < height; i++){
-        data[i * width] = 0;
-        data[i * width + width - 1] = 0;
-    }
-
-    for(int j = 0; j < width; j++){
-        data[j] = 0;
-        data[(height - 1) * width + j] = 0;
-    }
+    
     fwrite(data, 1, (bmp->info_header->img_size), out);
     non_maximum_suppression_bmp->data = data;
 
@@ -266,7 +286,6 @@ void DoubleThresholding(BMP* bmp, float low_threshold, float high_threshold){
                 flag |= (data[(i + pos[p][0] ) * width + (j + pos[p][1])] == 255);
             }
          
-
             int val = 0;
             if(flag) val = 255;
     
@@ -280,30 +299,15 @@ void DoubleThresholding(BMP* bmp, float low_threshold, float high_threshold){
 
 int main() {
     
-    // char get_file_path[50], out_file_path[50];
-    // const char* get_root = "./frame_save/frame", *out_root = "./frame_out/frame";
-    // const char* file = ".bmp";
-    // for(int i = 1; i <= 1000; i++){
-    //     sprintf(get_file_path, "%s%d%s", get_root, i, file);
-    //     sprintf(out_file_path, "%s%d%s", out_root, i, file);
-    //     printf("%s %s\n", get_file_path, out_file_path);
-    //     BMP* bmp = OpenImg(get_file_path);
-    //     //PrintImgInfo(bmp);
-    //     SaveImg(out_file_path, bmp);
-    //     free(bmp);
-        
-    // }
-    
-    BMP* bmp = OpenImg("./t.bmp");
+    // Canny Algorithm
+    BMP* bmp = OpenImg("./data/t.bmp");
     BMP* gray_bmp = Gray(bmp);
-    BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1);
-    PrintImgInfo(gaussian_blur_bmp);
+    BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1.4);
 
     float* theta = (float*)malloc(gaussian_blur_bmp->info_header->img_size * sizeof(float));
     BMP* sobel_gradient_bmp = SobelGradient(gaussian_blur_bmp, theta);
-    PrintImgInfo(sobel_gradient_bmp);
     BMP* non_maximum_suppression_bmp = NonMaximumSuppression(sobel_gradient_bmp, theta, 60);
-    DoubleThresholding(non_maximum_suppression_bmp, 127, 255);
+    DoubleThresholding(non_maximum_suppression_bmp, 50, 64);
     free(bmp);
     
 

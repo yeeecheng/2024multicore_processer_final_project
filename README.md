@@ -1,1 +1,6 @@
-final_project
+## final_project
+
+```=cmd
+nvcc main.cu -o main
+./main
+```
