@@ -8,7 +8,7 @@ find_package(CUDA REQUIRED)
 find_package( OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
-CUDA_ADD_EXECUTABLE(multicore_final_project test.cu)
+CUDA_ADD_EXECUTABLE(multicore_final_project main_cuda.cu)
 
 target_link_libraries( multicore_final_project ${OpenCV_LIBS} )
 

@@ -35,7 +35,7 @@ BMP* Gray(BMP* bmp){
     return gray_bmp;
 }
 
-void getGaussianKernel(double** kernel, int size, int sigma){
+void getGaussianKernel(double** kernel, int size, double sigma){
     if(size <= 0 || sigma == 0) return;
 
     double sum = 0;
@@ -51,7 +51,7 @@ void getGaussianKernel(double** kernel, int size, int sigma){
         for(int j = 0; j < size; j++){
             kernel[i][j] *= sum;
         }
-    }    
+    } 
 }
 
 BMP* GaussianBlur(BMP* bmp, int size, double sigma){
@@ -300,7 +300,7 @@ void DoubleThresholding(BMP* bmp, float low_threshold, float high_threshold){
 int main() {
     
     // Canny Algorithm
-    BMP* bmp = OpenImg("./data/t.bmp");
+    BMP* bmp = OpenImg("./frame_save/frame1.bmp");
     BMP* gray_bmp = Gray(bmp);
     BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1.4);
 
