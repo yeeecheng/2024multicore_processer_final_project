@@ -1,5 +1,5 @@
-#ifndef CANNY_CUDA_H
-#define CANNY_CUDA_H
+#ifndef CANNY_CUDA_V1_H
+#define CANNY_CUDA_V1_H
 
 #include <stdlib.h>
 #include <stdio.h>
