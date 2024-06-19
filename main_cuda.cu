@@ -2,7 +2,8 @@
 #include <cuda_runtime.h>
 // #include "include/canny_cuda_v1.h"
 #include "include/canny_cuda_v2.h"
-#include <iostream>
+// #include "include/canny_cuda_v3.h"
+
 using namespace cv;
 
 
@@ -26,6 +27,6 @@ int main() {
     // }
 
 
-	canny_cuda_streaming(1024, 1024);
+	canny_cuda_streaming(2048, 2048);
     return 0;
 }
