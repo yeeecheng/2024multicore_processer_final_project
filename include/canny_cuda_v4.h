@@ -1,5 +1,5 @@
-#ifndef CANNY_CUDA_V3_H
-#define CANNY_CUDA_V3_H
+#ifndef CANNY_CUDA_V4_H
+#define CANNY_CUDA_V4_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -59,7 +59,7 @@ void canny_cuda_streaming(int width, int height, int kernel_size= 5, double sigm
 			break;
 		}
 		resize(frame, frame, Size(width, height), 0, 0, INTER_LINEAR);		
-       
+	
         // data copy
         R = cudaMemcpy(org_img, frame.data, width * height * sizeof(uchar3), cudaMemcpyHostToDevice); 
         
@@ -82,7 +82,7 @@ void canny_cuda_streaming(int width, int height, int kernel_size= 5, double sigm
             //cudaDeviceSynchronize();
             // gaussian blur
             //printf("gaussian blur...\n");
-            gaussian_blur<<<grids, blocks , kernel_size * kernel_size * sizeof(double)>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
+            gaussian_blur<<<grids, blocks , (THREAD_SIZE + 4) * (THREAD_SIZE + 4) * sizeof(unsigned char)>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
             //cudaDeviceSynchronize();
             // sobel gradient
             //printf("sobel gradient...\n");
@@ -108,7 +108,7 @@ void canny_cuda_streaming(int width, int height, int kernel_size= 5, double sigm
 
             Mat final_img(width, height, CV_8UC1);
             cudaMemcpy(final_img.data, double_threshold_img, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost);
-          
+            // imwrite("../img.jpg", final_img);
             imshow("live", final_img);
 
             if (waitKey(1) == 'q') {
@@ -170,35 +170,52 @@ __global__ void gaussian_blur(unsigned char* gray_img, unsigned char* gaussian_b
                             {0.026110 ,0.056127 ,0.072438 ,0.056127, 0.026110}, 
                             {0.012146 ,0.026110 ,0.033697 ,0.026110, 0.012146}};
 
-    __shared__ unsigned char shared_gray_img[THREAD_SIZE * THREAD_SIZE];
+    int m = kernel_size / 2;
+    int y = global_tid / width, x = global_tid % width;
+    int inner_y = threadIdx.y, inner_x =  threadIdx.x;
+    int out_y = y - m, out_x = x - m;
+    int expand_width = (THREAD_SIZE + 2 * m);
+    // all needed calculate unit 
+    extern __shared__ unsigned char shared_gray_img[];
     
+
     if(gridDim.x * gridDim.y * THREAD_SIZE * THREAD_SIZE >= width * height){
-                
+
+       
+        if(inner_y < m){
+   
+            shared_gray_img[expand_width * (inner_y) + m + inner_x] = gray_img[global_tid];
+            shared_gray_img[expand_width * (inner_y + m + THREAD_SIZE) + m + inner_x] = gray_img[global_tid];
         
-        shared_gray_img[private_tid] = gray_img[global_tid];
+        }
+
+        if(inner_x < m){
+           
+            shared_gray_img[expand_width * (inner_y + m) + inner_x] = gray_img[global_tid];
+            shared_gray_img[expand_width * (inner_y + m) + inner_x + THREAD_SIZE + m] = gray_img[global_tid];
+       
+        }
+        if(inner_y < m && inner_x < m){
+            shared_gray_img[expand_width * inner_y + inner_x] =  gray_img[global_tid];
+            shared_gray_img[expand_width * (inner_y + THREAD_SIZE + m) + inner_x] = gray_img[global_tid];
+            shared_gray_img[expand_width * inner_y + inner_x + THREAD_SIZE + m] =gray_img[global_tid];
+            shared_gray_img[expand_width * (inner_y + THREAD_SIZE + m) + inner_x + THREAD_SIZE + m] = gray_img[global_tid];
+        }
+
+        shared_gray_img[expand_width * (m + inner_y) + (m + inner_x)] = gray_img[global_tid];
         __syncthreads();
 
-        int m = kernel_size / 2;
         double val = 0;
-        int y = global_tid / width, x = global_tid % width;
-        int inner_y = private_tid / THREAD_SIZE, inner_x =  private_tid % THREAD_SIZE;
         if( y < m || y > (height - m) || x < m || x > (width - m)){
             return;
         }
 
         for(int ii = -m; ii < m; ii++){
             for(int jj = -m; jj < m; jj++){
-
-                if(inner_y - m < 0 || inner_y + m >= THREAD_SIZE || inner_x - m < 0 || inner_x + m >= THREAD_SIZE){
-                    val += gray_img[(y + ii) * width + (x + jj)] * kernel[(ii + m)][jj + m];
-                }
-                else{
-                    val += shared_gray_img[(inner_y + ii) * THREAD_SIZE + (inner_x + jj)] * kernel[(ii + m)][jj + m];
-                }
-                
+                val += shared_gray_img[expand_width * (m + inner_y + ii) + (m + inner_x + jj)] * kernel[(ii + m)][jj + m];
             }
         }
-        gaussian_blur_img[global_tid] = (unsigned char) val;
+        gaussian_blur_img[y * width + x] = (unsigned char) val;
         
     }
    

@@ -8,7 +8,7 @@
 #include <opencv2/opencv.hpp>
 using namespace cv;
 
-#define THREAD_SIZE 32
+#define THREAD_SIZE 16
 
 __global__ void gray(uchar3* ,unsigned char* ,int ,int );
 __global__ void gaussian_blur(unsigned char* ,unsigned char* ,int ,int ,int ,double );
@@ -69,33 +69,33 @@ void canny_cuda_streaming(int width, int height, int kernel_size= 5, double sigm
         else{
 
         
-            dim3 blocks(32, 32);
+            dim3 blocks(THREAD_SIZE, THREAD_SIZE);
             dim3 grids((width + blocks.x - 1) / blocks.x, (height + blocks.y - 1)  / blocks.y);
-
+            
             cudaEvent_t start,stop;
             cudaEventCreate(&start);
             cudaEventCreate(&stop);
             cudaEventRecord(start,0);
             // gray 
-            printf("gray...\n");
+            //printf("gray...\n");
             gray<<<grids, blocks>>>(org_img, gray_img, width, height);
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
             // gaussian blur
-            printf("gaussian blur...\n");
-            gaussian_blur<<<grids, blocks , kernel_size * kernel_size * sizeof(double)>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
-            cudaDeviceSynchronize();
+            //printf("gaussian blur...\n");
+            gaussian_blur<<<grids, blocks>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
+            // cudaDeviceSynchronize();
             // sobel gradient
-            printf("sobel gradient...\n");
+            //printf("sobel gradient...\n");
             sobel_gradient<<<grids, blocks>>>(gaussian_img, sobel_gradient_img, width, height, theta);
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
             // NSM
-            printf("NSM...\n");
+            //printf("NSM...\n");
             non_maximum_suppression<<<grids, blocks>>>(sobel_gradient_img, nms_img, width, height, theta, threshold);
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
             // double threshold (final image)
-            printf("double threshold...\n");
+            //printf("double threshold...\n");
             double_threshold<<<grids, blocks>>>(nms_img, double_threshold_img, width, height, edge, low_threshold, high_threshold);
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
 
             cudaEventRecord(stop,0);
             cudaEventSynchronize(stop);
@@ -149,7 +149,7 @@ __global__ void gaussian_blur(unsigned char* gray_img, unsigned char* gaussian_b
     
     int blockId = gridDim.x * blockIdx.y + blockIdx.x;
     int tid = blockId * (THREAD_SIZE* THREAD_SIZE) + blockDim.x * threadIdx.y + threadIdx.x;
-
+   
     if(tid >= height * width){
         return;
     }

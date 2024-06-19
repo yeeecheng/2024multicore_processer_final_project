@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #include "BMP.h"
 
 BMP* Gray(BMP* bmp){
@@ -300,7 +301,10 @@ void DoubleThresholding(BMP* bmp, float low_threshold, float high_threshold){
 int main() {
     
     // Canny Algorithm
-    BMP* bmp = OpenImg("./frame_save/frame1.bmp");
+    BMP* bmp = OpenImg("./test.bmp");
+    clock_t start, end;
+
+    start = clock();
     BMP* gray_bmp = Gray(bmp);
     BMP* gaussian_blur_bmp = GaussianBlur(gray_bmp, 5, 1.4);
 
@@ -308,7 +312,10 @@ int main() {
     BMP* sobel_gradient_bmp = SobelGradient(gaussian_blur_bmp, theta);
     BMP* non_maximum_suppression_bmp = NonMaximumSuppression(sobel_gradient_bmp, theta, 60);
     DoubleThresholding(non_maximum_suppression_bmp, 50, 64);
+    end = clock();
+    printf("%.4lf\n", (double) (end - start) / CLOCKS_PER_SEC);
     free(bmp);
+
     
 
     return 0;

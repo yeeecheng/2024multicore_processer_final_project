@@ -16,67 +16,107 @@ __global__ void sobel_gradient(unsigned char* ,unsigned char* ,int ,int, float*)
 __global__ void non_maximum_suppression(unsigned char* ,unsigned char* ,int ,int ,float* ,int );
 __global__ void double_threshold(unsigned char* ,unsigned char* ,int ,int ,unsigned char* ,float ,float );
 
-Mat canny_cuda(Mat img, int kernel_size= 5, double sigma= 1.4, int threshold= 60, int low_threshold= 50, int high_threshold= 64){
-    // malloc memory
+void canny_cuda_streaming(int width, int height, int kernel_size= 5, double sigma= 1.4, int threshold= 60, int low_threshold= 50, int high_threshold= 64){
+    
+    VideoCapture cap(0);
+    if (!cap.isOpened()) {
+        printf("Cannot open camera\n");
+        return;
+    }
 
     // BGR img
     uchar3 *org_img;
     // binary img
-    unsigned char *gray_img, *gaussian_img, *sobel_gradient_img, *nms_img, *double_threshold_img;
-    int width = img.rows, height = img.cols;
-    //printf("w: %d, h: %d\n", width, height);
+    unsigned char *gray_img, *gaussian_img, *sobel_gradient_img, *nms_img, *edge, *double_threshold_img;
+    float* theta;
 
     // cuda memory malloc
-    cudaMalloc(&org_img, width * height * sizeof(uchar3));
-    cudaMalloc(&gray_img, width * height * sizeof(unsigned char));
-    cudaMalloc(&gaussian_img, width * height * sizeof(unsigned char));
-    cudaMalloc(&sobel_gradient_img, width * height * sizeof(unsigned char));
-    cudaMalloc(&nms_img, width * height * sizeof(unsigned char));
-    cudaMalloc(&double_threshold_img, width * height * sizeof(unsigned char));
+    cudaError_t R ;
+    R = cudaMalloc(&org_img, width * height * sizeof(uchar3));
+    printf(" org_img : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&gray_img, width * height * sizeof(unsigned char));
+    printf(" gray_img : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&gaussian_img, width * height * sizeof(unsigned char));
+    printf(" gaussian_img : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&theta, width * height * sizeof(float));
+    printf(" theta : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&sobel_gradient_img, width * height * sizeof(unsigned char));
+    printf(" sobel_gradient_img : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&nms_img, width * height * sizeof(unsigned char));
+    printf(" nms_img : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&edge, width * height * sizeof(unsigned char));
+    printf(" edge : %s\n",cudaGetErrorString(R));
+    R = cudaMalloc(&double_threshold_img, width * height * sizeof(unsigned char));
+    printf(" double_threshold_img : %s\n",cudaGetErrorString(R));
 
-    // data copy
-    cudaMemcpy(org_img, img.data, width * height * sizeof(uchar3), cudaMemcpyHostToDevice); 
 
-    dim3 blocks(32, 32);
-    dim3 grids((width + blocks.x - 1) / blocks.x, (height + blocks.y - 1)  / blocks.y);
+	Mat frame;
+	while(true){
 
-    cudaEvent_t start,stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start,0);
-    // gray 
-    gray<<<grids, blocks>>>(org_img, gray_img, width, height);
-    // gaussian blur
-    gaussian_blur<<<grids, blocks , kernel_size * kernel_size * sizeof(double)>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
-    // // sobel gradient
-    float* theta;
-    cudaMalloc(&theta, width * height * sizeof(float));
-    sobel_gradient<<<grids, blocks>>>(gaussian_img, sobel_gradient_img, width, height, theta);
-    // // NSM
-    non_maximum_suppression<<<grids, blocks>>>(sobel_gradient_img, nms_img, width, height, theta, threshold);
-    // // double threshold (final image)
-    unsigned char* edge;
-    cudaMalloc(&edge, width * height * sizeof(unsigned char));
-    double_threshold<<<grids, blocks>>>(nms_img, double_threshold_img, width, height, edge, low_threshold, high_threshold);
-    
-    cudaEventRecord(stop,0);
-	cudaEventSynchronize(stop);
-	// Get stop time
+		bool ret = cap.read(frame);
+		if(!ret){
+			printf("Cannot receive frame.\n");
+			break;
+		}
+		resize(frame, frame, Size(width, height), 0, 0, INTER_LINEAR);		
 	
-	float elapsedTime;
-    cudaEventElapsedTime(&elapsedTime, start, stop);
-    printf(" Excuetion Time on GPU: %3.20f s\n",elapsedTime/1000);
+        // data copy
+        R = cudaMemcpy(org_img, frame.data, width * height * sizeof(uchar3), cudaMemcpyHostToDevice); 
+        
+        if (R != cudaSuccess) {
+            printf(" org_img : %s\n",cudaGetErrorString(R));
+        }
+        else{
+            dim3 blocks(32, 32);
+            dim3 grids((width + blocks.x - 1) / blocks.x, (height + blocks.y - 1)  / blocks.y);
 
-    Mat final_img(width, height, CV_8UC1);
-    cudaMemcpy(final_img.data, gaussian_img, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+            cudaEvent_t start,stop;
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+            cudaEventRecord(start,0);
+            // gray 
+            gray<<<grids, blocks>>>(org_img, gray_img, width, height);
+            // gaussian blur
+            gaussian_blur<<<grids, blocks , kernel_size * kernel_size * sizeof(double)>>>(gray_img, gaussian_img, width, height, kernel_size, sigma);
+            // // sobel gradient
+            float* theta;
+            cudaMalloc(&theta, width * height * sizeof(float));
+            sobel_gradient<<<grids, blocks>>>(gaussian_img, sobel_gradient_img, width, height, theta);
+            // // NSM
+            non_maximum_suppression<<<grids, blocks>>>(sobel_gradient_img, nms_img, width, height, theta, threshold);
+            // // double threshold (final image)
+            unsigned char* edge;
+            cudaMalloc(&edge, width * height * sizeof(unsigned char));
+            double_threshold<<<grids, blocks>>>(nms_img, double_threshold_img, width, height, edge, low_threshold, high_threshold);
+            
+            cudaEventRecord(stop,0);
+            cudaEventSynchronize(stop);
+            // Get stop time
+            
+            float elapsedTime;
+            cudaEventElapsedTime(&elapsedTime, start, stop);
+            printf(" Excuetion Time on GPU: %3.20f s\n",elapsedTime/1000);
+
+            Mat final_img(width, height, CV_8UC1);
+            cudaMemcpy(final_img.data, double_threshold_img, width * height * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+            // imwrite("../img.jpg", final_img);
+            imshow("live", final_img);
+
+            if (waitKey(1) == 'q') {
+                break;
+            }
+        }
+        
+	}
+
     cudaFree(gray_img);
     cudaFree(gaussian_img);
+    cudaFree(theta);
     cudaFree(sobel_gradient_img);
     cudaFree(nms_img);
     cudaFree(double_threshold_img);
-
-    return final_img;
-}   
+    cudaFree(edge);
+}
 
 
 __global__ void gray(uchar3 *org_img, unsigned char* gray_img, int width, int height){
